@@ -20,6 +20,8 @@ sys.path.append("../")
 import cartopy.crs as ccrs
 from matplotlib import pyplot as plt
 from sklearn.linear_model import LinearRegression  # linear regression module
+import numpy as np
+import pandas as pd
 
 # Import doptrack-estimate functions
 from propagation_functions.environment import *
@@ -648,3 +650,113 @@ ax4.set_ylabel('Residual [m/s]')
 
 
 plt.show()
+
+runs = [
+    # Reference
+    {"id": 0, "name": "reference", "gravity": "spherical", "drag": True, "Cd_factor": 1.0, "third_body": "all", "srp": True, "Cr_factor": 1.0},
+
+    # Gravity sensitivity
+    {"id": 1, "name": "point_mass", "gravity": "point", "drag": True, "Cd_factor": 1.0, "third_body": "all", "srp": True, "Cr_factor": 1.0},
+
+    # Drag sensitivity
+    {"id": 2, "name": "drag_off", "gravity": "spherical", "drag": False, "Cd_factor": 1.0, "third_body": "all", "srp": True, "Cr_factor": 1.0},
+    {"id": 3, "name": "Cd+10%", "gravity": "spherical", "drag": True, "Cd_factor": 1.1, "third_body": "all", "srp": True, "Cr_factor": 1.0},
+    {"id": 4, "name": "Cd+50%", "gravity": "spherical", "drag": True, "Cd_factor": 1.5, "third_body": "all", "srp": True, "Cr_factor": 1.0},
+    {"id": 5, "name": "Cd+100%", "gravity": "spherical", "drag": True, "Cd_factor": 2.0, "third_body": "all", "srp": True, "Cr_factor": 1.0},
+
+    # Third body sensitivity
+    {"id": 6, "name": "no_3rd_body", "gravity": "spherical", "drag": True, "Cd_factor": 1.0, "third_body": "none", "srp": True, "Cr_factor": 1.0},
+    {"id": 7, "name": "sun_moon_only", "gravity": "spherical", "drag": True, "Cd_factor": 1.0, "third_body": "sun_moon", "srp": True, "Cr_factor": 1.0},
+    {"id": 8, "name": "moon_only", "gravity": "spherical", "drag": True, "Cd_factor": 1.0, "third_body": "moon_only", "srp": True, "Cr_factor": 1.0},
+
+    # SRP sensitivity
+    {"id": 9, "name": "srp_off", "gravity": "spherical", "drag": True, "Cd_factor": 1.0, "third_body": "all", "srp": False, "Cr_factor": 1.0},
+    {"id":10, "name": "Cr+10%", "gravity": "spherical", "drag": True, "Cd_factor": 1.0, "third_body": "all", "srp": True, "Cr_factor": 1.1},
+    {"id":11, "name": "Cr+50%", "gravity": "spherical", "drag": True, "Cd_factor": 1.0, "third_body": "all", "srp": True, "Cr_factor": 1.5},
+    {"id":12, "name": "Cr+100%", "gravity": "spherical", "drag": True, "Cd_factor": 1.0, "third_body": "all", "srp": True, "Cr_factor": 2.0},
+]
+
+results = []
+
+for run in runs:
+
+    print(f"Running: {run['name']}")
+
+    # Define environment with modified Cd and Cr
+    bodies = define_environment(
+        mass,
+        ref_area,
+        drag_coef * run["Cd_factor"],
+        srp_coef * run["Cr_factor"],
+        "Delfi"
+    )
+
+    # Build acceleration dictionary
+    accelerations = dict()
+
+    # Earth gravity
+    accelerations["Earth"] = {
+        "point_mass_gravity": run["gravity"] == "point",
+        "spherical_harmonic_gravity": run["gravity"] == "spherical",
+        "drag": run["drag"]
+    }
+
+    # Third body logic
+    if run["third_body"] == "all":
+        bodies_list = ["Sun", "Moon", "Venus", "Mars", "Jupiter"]
+    elif run["third_body"] == "none":
+        bodies_list = []
+    elif run["third_body"] == "sun_moon":
+        bodies_list = ["Sun", "Moon"]
+    elif run["third_body"] == "moon_only":
+        bodies_list = ["Moon"]
+
+    for body in bodies_list:
+        accelerations[body] = {"point_mass_gravity": True}
+
+        if body == "Sun":
+            accelerations[body]["solar_radiation_pressure"] = run["srp"]
+
+    # Propagate
+    cartesian_states, keplerian_states, latitudes, longitudes, saved_accelerations = \
+        propagate_initial_state(initial_state, initial_epoch, final_epoch, bodies, accelerations, "Delfi", False)
+
+    propagation_epochs = cartesian_states[:, 0]
+
+    # Compute differences
+    rsw_diff = np.zeros((len(propagation_epochs), 3))
+    kep_diff = np.zeros((len(propagation_epochs), 6))
+
+    for i in range(len(propagation_epochs)):
+        current_epoch = propagation_epochs[i]
+
+        tle_state = delfi_ephemeris.cartesian_state(current_epoch)
+        prop_state = cartesian_states[i,1:7]
+
+        state_diff = prop_state - tle_state
+        rotation_to_rsw = frame_conversion.inertial_to_rsw_rotation_matrix(tle_state)
+
+        rsw_diff[i,:] = rotation_to_rsw @ state_diff[0:3]
+
+        tle_kep = element_conversion.cartesian_to_keplerian(
+            tle_state, bodies.get("Earth").gravitational_parameter)
+
+        kep_diff[i,:] = keplerian_states[i,1:7] - tle_kep
+
+    # Metrics
+    result_entry = {
+        "run_id": run["id"],
+        "name": run["name"],
+        "max_da_km": np.max(np.abs(kep_diff[:,0])) / 1e3,
+        "max_de": np.max(np.abs(kep_diff[:,1])),
+        "max_di_deg": np.max(np.abs(kep_diff[:,2])) * 180/np.pi,
+        "max_R_km": np.max(np.abs(rsw_diff[:,0])) / 1e3,
+        "max_S_km": np.max(np.abs(rsw_diff[:,1])) / 1e3,
+        "max_W_km": np.max(np.abs(rsw_diff[:,2])) / 1e3,
+    }
+
+    results.append(result_entry)
+
+df = pd.DataFrame(results)
+df.to_csv("sensitivity_results.csv", index=False)
+print(df)

@@ -1,5 +1,5 @@
 ###############################################################
-### ASSIGNMENT 3 : ORBIT SOLUTION - QUALITY ASSESSMENT 
+### ASSIGNMENT 3 : ORBIT SOLUTION - QUALITY ASSESSMENT
 ###############################################################
 
 # In this assignment, you will use simulated observations to investigate how the different settings and variables that can affect the quality of
@@ -12,19 +12,19 @@
 
 # The code automatically provides you with a number of printed outputs and plots. It prints the following:
 # - true errors = deviations between the estimated parameters and their *true* values (i.e. their values in our model, used both to propagate the
-# spacecraft's dynamics and simulate the Doppler data). 
-# - formal errors = statistical estimates of the solution's accuracy, for each estimated parameters. 
+# spacecraft's dynamics and simulate the Doppler data).
+# - formal errors = statistical estimates of the solution's accuracy, for each estimated parameters.
 
-# Tudat will also print the list of all estimated parameters, which will allow you to trace back which index corresponds to which parameter, both 
+# Tudat will also print the list of all estimated parameters, which will allow you to trace back which index corresponds to which parameter, both
 # in the figures and in the printed error vectors.
 
-# You are of course free to provide other plots and/or results to complete this assignment if you think that they bring additional insights or 
-# support your argumentation more efficiently. 
+# You are of course free to provide other plots and/or results to complete this assignment if you think that they bring additional insights or
+# support your argumentation more efficiently.
 
-# Throughout this assignment, you can use the following **nominal** settings, unless specified otherwise. 
+# Throughout this assignment, you can use the following **nominal** settings, unless specified otherwise.
 #  - total propagation time = 1 day
-#  - tracking arc duration = 1 day 
-#  - Doppler noise = 1 m/s 
+#  - tracking arc duration = 1 day
+#  - Doppler noise = 1 m/s
 #  - ground station = only DopTrack (Delft)
 #  - perturbation of the initial guess for the spacecraft's state = based on the next TLE update (see comment in the code for more detail)
 #  - estimated parameters:
@@ -34,21 +34,22 @@
 # You are free to modify these settings to either improve your solution, or generate additional results to support your argumentation. If you do
 # so, please indicate it in your report with a short justification for your choice.
 
-# TIP: if an estimation fails during the assignment, you might still retrieve the formal uncertainties and correlations by setting the number of 
+# TIP: if an estimation fails during the assignment, you might still retrieve the formal uncertainties and correlations by setting the number of
 # iterations to 1. Be aware that the true errors and observation residuals will **not be converged** in this case, but they will simply be returned
-# after only one iteration. The formal errors and correlations, however, might provide some insights into why the estimation failed.  
+# after only one iteration. The formal errors and correlations, however, might provide some insights into why the estimation failed.
 
 
-### UNITS AND CONVENTIONS 
+### UNITS AND CONVENTIONS
 # All parameters are represented in SI units or otherwise stated.
 
 ### CODE USAGE
-# In this course you are using actual tracking data from the DopTrack laboratory (https://doptrack.tudelft.nl) and use the Delft-based orbit 
+# In this course you are using actual tracking data from the DopTrack laboratory (https://doptrack.tudelft.nl) and use the Delft-based orbit
 # determination software Tudat (https://docs.tudat.space/en/stable/#) to perform orbit analysis.
 
 
 ### IMPORT STATEMENTS
 import sys
+
 sys.path.append("../")
 
 # Load required standard modules
@@ -63,7 +64,8 @@ from tudatpy.dynamics import environment
 from tudatpy.dynamics import parameters
 from tudatpy.estimation import estimation_analysis
 from tudatpy.estimation.observable_models_setup import links, model_settings
-from tudatpy.estimation.observations_setup import viability, random_noise, observations_simulation_settings, observations_wrapper
+from tudatpy.estimation.observations_setup import viability, random_noise, observations_simulation_settings, \
+    observations_wrapper
 from tudatpy.estimation.observations import observations_processing
 
 # Import doptrack-estimate functions
@@ -77,8 +79,7 @@ import cartopy.crs as ccrs
 # Load spice kernels
 spice.load_standard_kernels()
 
-
-### SIMULATING DELFI-C3 
+### SIMULATING DELFI-C3
 
 # Lets take a typical satellite orbit and assess how well we can estimate it orbit.
 
@@ -90,11 +91,10 @@ delfi_tle = environment.Tle("1 32789U 08021G   20090.88491347 +.00001016 +00000-
 # Retrieve initial epoch from TLE
 initial_epoch = delfi_tle.get_epoch()
 
+### ORBIT DURATION AND NUMBER OF ARCS
 
-### ORBIT DURATION AND NUMBER OF ARCS 
-
-# During this assignment, you will be asked to modify the propagation duration, for instance to test the effect of using a longer observational time 
-# on the quality of your estimation solution. Whenever modifying this value, think about whether you also want to modify the duration of the tracking 
+# During this assignment, you will be asked to modify the propagation duration, for instance to test the effect of using a longer observational time
+# on the quality of your estimation solution. Whenever modifying this value, think about whether you also want to modify the duration of the tracking
 # arcs. The total propagation duration will automatically be divided into how many tracking arcs as necessary.
 
 # Define the time over which you want to propagate your simulated spacecraft orbit
@@ -111,7 +111,6 @@ mid_epoch = (initial_epoch + final_epoch) / 2.0
 arc_duration = 1.0 * constants.JULIAN_DAY
 arc_start_times, arc_mid_times, arc_end_times = get_arc_times_definition(initial_epoch, final_epoch, arc_duration)
 nb_arcs = len(arc_mid_times)
-
 
 # Define the properties of your simulated spacecraft, and the propagation environment
 mass = 2.2
@@ -154,25 +153,25 @@ initial_state = delfi_ephemeris.cartesian_state(mid_epoch)
 # To use consistent arc-wise initial states (they still all belong to a single spacecraft orbit!), we propagate the spacecraft's orbit
 # from its **global** initial state defined earlier over the entire propagation duration. From this **global** propagated orbit, we
 # then retrieve the spacecraft's states at the mid-epoch of each arc, to be later used as initial condition for the **arc_wise** propagation.
-global_orbit = propagate_initial_state(initial_state, initial_epoch, final_epoch, bodies, accelerations, "spacecraft", save_ephemeris=False)
+global_orbit = propagate_initial_state(initial_state, initial_epoch, final_epoch, bodies, accelerations, "spacecraft",
+                                       save_ephemeris=False)
 arc_wise_initial_states = retrieve_arc_wise_states_from_orbit(global_orbit, arc_mid_times)
 
 # Create mutli-arc propagation settings
 multi_arc_propagation_settings = define_multi_arc_propagation_settings(
     arc_wise_initial_states, arc_start_times, arc_end_times, bodies, accelerations, "spacecraft")
 
-
 ### Groundstation coverage
 
-# In this assignment, you will be asked the number of "fake" stations you want to create below. Always make sure that the size of the stations' 
-# longitude and latitude vectors below matches the number of stations you want to create (the code is pre-defined for 2 "fake", which is what you 
+# In this assignment, you will be asked the number of "fake" stations you want to create below. Always make sure that the size of the stations'
+# longitude and latitude vectors below matches the number of stations you want to create (the code is pre-defined for 2 "fake", which is what you
 # will need in most of this assignment).
 
 # Create the DopTrack ground station
 define_doptrack_station(bodies)
 
 # Create "fake" ground station(s) and specify their location(s)
-nb_fake_stations = 2
+nb_fake_stations = 0
 
 # Pre-defined coordinates of "fake" ground stations close to DopTrack (located in Den Haag and Rotterdam, respectively)
 # Comment/uncomment the following two lines depending on where you want your "fake" stations to be located
@@ -181,8 +180,11 @@ nb_fake_stations = 2
 
 # Pre-defined coordinates of "fake" ground stations far away from DopTrack (located in Australia and Braxil, respectively)
 # Comment/uncomment the following two lines depending on where you want your "fake" stations to be located
-stations_lat = [-25.0, -14.0]
-stations_long = [134.0, -52.0]
+# stations_lat = [-25.0, -14.0]
+# stations_long = [134.0, -52.0]
+
+stations_lat = []
+stations_long = []
 
 # Create all stations (DopTrack and as many "fake" stations as defined above)
 stations_names = create_ground_stations(bodies, nb_fake_stations, stations_long, stations_lat)
@@ -192,14 +194,13 @@ plt.figure()
 ax = plt.axes(projection=ccrs.PlateCarree())
 ax.coastlines()
 ax.scatter(4.3571, 52.0116, color='red', marker='*', s=200, label='DopTrack')
-if nb_fake_stations>0:
-    ax.scatter(stations_long,stations_lat, color='blue', marker='*', s=200, label='Fake stations')
+if nb_fake_stations > 0:
+    ax.scatter(stations_long, stations_lat, color='blue', marker='*', s=200, label='Fake stations')
 ax.gridlines(draw_labels=True)
 ax.set_xlim(-180.0, 180.0)
 ax.set_ylim(-90.0, 90.0)
 ax.legend()
 plt.show()
-
 
 # Define all uplink link ends for which one-way Doppler observables will be simulated
 link_definitions = create_link_ends_definitions(nb_fake_stations)
@@ -217,11 +218,10 @@ observation_simulation_settings = []
 for i in range(nb_fake_stations + 1):
     observation_simulation_settings.append(observations_simulation_settings.tabulated_simulation_settings(
         model_settings.one_way_instantaneous_doppler_type, link_definitions[i], observation_times))
-    
 
 ### MEASUREMENT ACCURACY
 
-# From the previous assignments you observed the accuracy of the Doppler data for different satellites. 
+# From the previous assignments you observed the accuracy of the Doppler data for different satellites.
 # Here, with the parameter noise_level (default 1 m/s), you are able to simulate any Gaussian uncertrainty on the simulated Doppler data and
 # assess its effect on the solution.
 
@@ -229,7 +229,7 @@ for i in range(nb_fake_stations + 1):
 # In this assignment, you will be asked to modify this noise level value.
 noise_level = 1.0  # in m/s
 random_noise.add_gaussian_noise_to_observable(observation_simulation_settings, noise_level,
-                                             model_settings.one_way_instantaneous_doppler_type)
+                                              model_settings.one_way_instantaneous_doppler_type)
 
 # Create observation viability settings
 # For each station, we only simulated Doppler data when the spacecraft is visible from the station and above an elevation mask of 15 degrees
@@ -237,12 +237,12 @@ for i in range(nb_fake_stations + 1):
     viability_setting = viability.elevation_angle_viability(["Earth", stations_names[i]], np.deg2rad(15))
 
     viability.add_viability_check_to_observable_for_link_ends(
-        [observation_simulation_settings[i]], [viability_setting], model_settings.one_way_instantaneous_doppler_type, link_definitions[i])
+        [observation_simulation_settings[i]], [viability_setting], model_settings.one_way_instantaneous_doppler_type,
+        link_definitions[i])
 
+### PARAMETER ESTIMATION
 
-### PARAMETER ESTIMATION 
-
-# From the SOD lectures you learned that orbit estimation is not only useful to determine the state of the spacecraft, but also to estimate the values 
+# From the SOD lectures you learned that orbit estimation is not only useful to determine the state of the spacecraft, but also to estimate the values
 # of some dynamical parameters, like atmospheric drag or gravitational perturbations.
 
 
@@ -283,11 +283,10 @@ truth_parameters = parameters_to_estimate.parameter_vector
 estimator = estimation_analysis.Estimator(
     bodies, parameters_to_estimate, observation_settings_list, multi_arc_propagation_settings)
 
-
 ### SIMULATED DOPPLER MEASUREMENTS
 
-# Now that you have set your orbit scenario and groundstation architecture, you can simulate the Doppler data that you would acquire in real-life. This 
-# data is similar to the DopTrack data from Assignment 1 and 2. 
+# Now that you have set your orbit scenario and groundstation architecture, you can simulate the Doppler data that you would acquire in real-life. This
+# data is similar to the DopTrack data from Assignment 1 and 2.
 
 # Simulate Doppler measurements
 simulated_observations = observations_wrapper.simulate_observations(
@@ -311,18 +310,17 @@ plt.ylabel("Range-rate [m/s]")
 plt.legend()
 plt.show()
 
+### PERTURBATION OF THE INITIAL STATE
 
-### PERTURBATION OF THE INITIAL STATE 
-
-# Set the boolean "use_next_tle_as_perturbation" and "use_manual_perturbation" to True/False depending on which initial state perturbation strategy you 
+# Set the boolean "use_next_tle_as_perturbation" and "use_manual_perturbation" to True/False depending on which initial state perturbation strategy you
 # want to apply. This will be modified throughout the assignment. There are two perturbation strategies:
 # - Wrong TLE selection as initial state (not the closest TLE available)
 # - Random gaussian uncertainty on position and velocity of the initial state
 
 # Perturb the initial state estimate from the truth
 perturbed_parameters = truth_parameters.copy()
-use_next_tle_as_perturbation = True
-use_manual_perturbation = False
+use_next_tle_as_perturbation = False
+use_manual_perturbation = True
 
 # Use next TLE update to derive realistic initial state perturbation
 if use_next_tle_as_perturbation:
@@ -346,7 +344,7 @@ if use_manual_perturbation:
     manual_position_perturbation = 1000.0  # in m
     manual_velocity_perturbation = 1.0  # in m/s
     manual_state_perturbation = np.concatenate((manual_position_perturbation * np.ones(3),
-                                               manual_velocity_perturbation * np.ones(3)))
+                                                manual_velocity_perturbation * np.ones(3)))
     for i in range(nb_arcs):
         perturbed_parameters[i * 6:(i + 1) * 6] += manual_state_perturbation
 
@@ -354,14 +352,14 @@ if use_manual_perturbation:
 parameters_to_estimate.parameter_vector = perturbed_parameters
 initial_parameters_perturbation = perturbed_parameters - truth_parameters
 
-
 ### START ESTIMATION
 
-# Start the estimation of the chosen scenario and retrieve the estimated parameters and their formal errors. Because this is a 
+# Start the estimation of the chosen scenario and retrieve the estimated parameters and their formal errors. Because this is a
 # simulation, we can assess the true errors and see how well the formal errors describe the true errors.
 
 # Define observations weights
-simulated_observations.set_constant_weight(noise_level ** -2, observations_processing.observation_parser(model_settings.one_way_instantaneous_doppler_type))
+simulated_observations.set_constant_weight(noise_level ** -2, observations_processing.observation_parser(
+    model_settings.one_way_instantaneous_doppler_type))
 
 # Create input settings for the estimation
 nb_iterations = 10  # number of least-squares iteration to be performed (this can be modified if the estimation fails, see tip)
@@ -409,32 +407,31 @@ print('###############################################')
 print('###############################################')
 print('PRINTING DETAILED ESTIMATION OUTPUTS')
 for arc in range(nb_arcs):
-    print('-------------ARC #', str(arc+1), '---------------')
+    print('-------------ARC #', str(arc + 1), '---------------')
 
     print('True state [m,m/s]')
-    print(truth_parameters[arc*6+0:arc*6+6])
+    print(truth_parameters[arc * 6 + 0:arc * 6 + 6])
     print('Estimated state [m,m/s]')
-    print(updated_parameters[arc*6:(arc+1)*6])
-    print ('True error [m,m/s]')
-    print(true_errors[arc*6:(arc+1)*6])
-    print ('Formal error [m,m/s]')
-    print(formal_errors[arc*6:(arc+1)*6])
-    print ('Relative error [-]')
-    print(np.abs(true_errors[arc*6:(arc+1)*6])/truth_parameters[arc*6+0:arc*6+6])
-
+    print(updated_parameters[arc * 6:(arc + 1) * 6])
+    print('True error [m,m/s]')
+    print(true_errors[arc * 6:(arc + 1) * 6])
+    print('Formal error [m,m/s]')
+    print(formal_errors[arc * 6:(arc + 1) * 6])
+    print('Relative error [-]')
+    print(np.abs(true_errors[arc * 6:(arc + 1) * 6]) / truth_parameters[arc * 6 + 0:arc * 6 + 6])
 
 print('----------------------------------------')
 print('OTHER (NON-STATE) PARAMETERS (check parameter indices)')
 print('True parameters')
-print(truth_parameters[nb_arcs*6:])
+print(truth_parameters[nb_arcs * 6:])
 print('Estimated parameters')
-print(updated_parameters[nb_arcs*6:])
-print ('True error')
-print(true_errors[nb_arcs*6:])
-print ('Formal error')
-print(formal_errors[nb_arcs*6:])
-print ('Relative error')
-print(np.abs(true_errors[nb_arcs*6:])/truth_parameters[nb_arcs*6:])
+print(updated_parameters[nb_arcs * 6:])
+print('True error')
+print(true_errors[nb_arcs * 6:])
+print('Formal error')
+print(formal_errors[nb_arcs * 6:])
+print('Relative error')
+print(np.abs(true_errors[nb_arcs * 6:]) / truth_parameters[nb_arcs * 6:])
 
 print('###############################################')
 
@@ -522,15 +519,15 @@ plt.ylabel('Parameter index [-]')
 rotation_matrix_correlations = np.identity(nb_parameters)
 for i in range(nb_arcs):
     rotation_to_rsw = frame_conversion.inertial_to_rsw_rotation_matrix(arc_wise_initial_states[i])
-    rotation_matrix_correlations[i*6+0:i*6+3,i*6+0:i*6+3] = rotation_to_rsw
-    rotation_matrix_correlations[i*6+3:i*6+6,i*6+3:i*3+6] = rotation_to_rsw
+    rotation_matrix_correlations[i * 6 + 0:i * 6 + 3, i * 6 + 0:i * 6 + 3] = rotation_to_rsw
+    rotation_matrix_correlations[i * 6 + 3:i * 6 + 6, i * 6 + 3:i * 3 + 6] = rotation_to_rsw
 
-rsw_covariance = rotation_matrix_correlations @ covariance @ np.transpose( rotation_matrix_correlations )
+rsw_covariance = rotation_matrix_correlations @ covariance @ np.transpose(rotation_matrix_correlations)
 rsw_formal_errors = np.sqrt(np.diagonal(rsw_covariance))
 rsw_correlations = rsw_covariance
 for i in range(nb_parameters):
     for j in range(nb_parameters):
-        rsw_correlations[i,j] = rsw_covariance[i,j] / (rsw_formal_errors[i] * rsw_formal_errors[j])
+        rsw_correlations[i, j] = rsw_covariance[i, j] / (rsw_formal_errors[i] * rsw_formal_errors[j])
 
 plt.figure()
 plt.imshow(np.abs(rsw_correlations), aspect='auto', interpolation='none')
